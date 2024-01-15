@@ -8,9 +8,9 @@ mixin loginPage()
                 div
                     h2(style="font-weight:bold;text-align:center;margin:0") {{ $t("view.login.login") }}
                     el-form(ref="loginForm" :model="loginForm" :rules="loginForm.rules" @submit.native.prevent="login()")
-                        el-form-item(:label="$t('view.login.field.username')" prop="username" required)
+                        el-form-item(:label="$t('view.login.field.username')" prop="username")
                             el-input(v-model="loginForm.username" name="username" :placeholder="$t('view.login.field.username')" clearable)
-                        el-form-item(:label="$t('view.login.field.password')" prop="password" required style="margin-top:10px")
+                        el-form-item(:label="$t('view.login.field.password')" prop="password" style="margin-top:10px")
                             el-input(type="password" v-model="loginForm.password" name="password" :placeholder="$t('view.login.field.password')" clearable show-password)
                         el-checkbox(v-model="loginForm.saveCredentials" style="margin-top:15px") {{ $t("view.login.field.saveCredentials") }}
                         el-checkbox(v-model="enableCustomEndpoint" @change="toggleCustomEndpoint" style="margin-top:10px") {{ $t("view.login.field.devEndpoint") }}

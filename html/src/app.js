@@ -7790,13 +7790,13 @@ speechSynthesis.getVoices();
         rules: {
             username: [
                 {
-                    required: true,
+                    required: false,
                     trigger: 'blur'
                 }
             ],
             password: [
                 {
-                    required: true,
+                    required: false,
                     trigger: 'blur'
                 }
             ]
