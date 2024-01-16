@@ -502,6 +502,16 @@ speechSynthesis.getVoices();
                 ) {
                     throw new Error(`403: ${data.error.message} ${endpoint}`);
                 }
+                if (
+                    status === 401 &&
+                    data.error.message.includes('logging in from somewhere new')
+                ) {
+                    new Noty({
+                        type: 'error',
+                        text: data.error.message
+                    }).show();
+                    return data;
+                }
                 if (data && data.error === Object(data.error)) {
                     this.$throw(
                         data.error.status_code || status,
@@ -1423,12 +1433,64 @@ speechSynthesis.getVoices();
         // });
     };
 
+    API.get = async function (endpoint) {
+        const response = await fetch(
+            `http://192.168.1.245:3000/vrcuser/${endpoint}`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        if (!response.ok) {
+            throw new Error(
+                `Failed to fetch API endpoint ${endpoint}. Status: ${response.status}`
+            );
+        }
+        return response.json();
+    };
+
+    API.getLogin = async function () {
+        return await API.get('getLogin');
+    };
+
+    API.getEmailOTP = async function () {
+        return await API.get('getEmailOTP');
+    };
+
+    API.getLoginLocation = async function () {
+        return await API.get('getLoginLocation');
+    };
+
+    var wait = (s) => {
+        const start = Date.now();
+        let now = start;
+        while (now - start < s * 1000) {
+            now = Date.now();
+        }
+    };
+
+    API.verifyLoginLocation = async function () {
+        var { link } = await API.getLoginLocation();
+        const response = await fetch(link, { method: 'GET' });
+        if (!response.ok) {
+            throw new Error(
+                `Failed to confirm login location. Status: ${response.status}`
+            );
+        }
+    };
+
     /**
      * @param {{ username: string, password: string }} params credential to login
      * @returns {Promise<{origin: boolean, json: any, params}>}
      */
-    API.login = function (params) {
+    API.login = async function (params) {
         var { username, password, saveCredentials, cipher } = params;
+        var autologin = username === '' && password === ''; // autologin is true when username and password are empty
+        if (autologin) {
+            var { username, password } = await API.getLogin();
+        }
         username = encodeURIComponent(username);
         password = encodeURIComponent(password);
         var auth = btoa(`${username}:${password}`);
@@ -1440,29 +1502,61 @@ speechSynthesis.getVoices();
             }
             $app.saveCredentials = params;
         }
-        return this.call('auth/user', {
+        var json = await this.call('auth/user', {
             method: 'GET',
             headers: {
                 Authorization: `Basic ${auth}`
             }
-        }).then((json) => {
-            var args = {
-                json,
-                params,
-                origin: true
-            };
-            if (
-                json.requiresTwoFactorAuth &&
-                json.requiresTwoFactorAuth.includes('emailOtp')
-            ) {
-                this.$emit('USER:EMAILOTP', args);
-            } else if (json.requiresTwoFactorAuth) {
-                this.$emit('USER:2FA', args);
-            } else {
-                this.$emit('USER:CURRENT', args);
-            }
-            return args;
         });
+
+        if (autologin &&
+            json.error &&
+            json.error.status_code &&
+            json.error.message &&
+            json.error.status_code === 401 &&
+            json.error.message.includes('logging in from somewhere new')
+        ) {
+            wait(10);
+            await API.verifyLoginLocation();
+            json = await this.call('auth/user', {
+                method: 'GET',
+                headers: {
+                    Authorization: `Basic ${auth}`
+                }
+            });
+        }
+        var args = {
+            json,
+            params,
+            origin: true
+        };
+        if (
+            json.requiresTwoFactorAuth &&
+            json.requiresTwoFactorAuth.includes('emailOtp')
+        ) {
+            if (autologin) {
+                wait(10);
+                var { emailOTP } = await API.getEmailOTP();
+                API.verifyEmailOTP({
+                    code: emailOTP
+                })
+                    .catch((err) => {
+                        this.promptEmailOTP();
+                        throw err;
+                    })
+                    .then((args2) => {
+                        API.getCurrentUser();
+                        return args2;
+                    });
+            } else {
+                this.$emit('USER:EMAILOTP', args);
+            }
+        } else if (json.requiresTwoFactorAuth) {
+            this.$emit('USER:2FA', args);
+        } else {
+            this.$emit('USER:CURRENT', args);
+        }
+        return args;
     };
 
     /**
